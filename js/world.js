@@ -63,7 +63,7 @@ export class World {
     if (rho < CFG.CRATER_R + 80) {
       const ang = Math.atan2(cdz, cdx);
       const Reff = CFG.CRATER_R + 9 * fbm2(Math.cos(ang) * 2.2 + 5, Math.sin(ang) * 2.2, 3);
-      craterT = smoothstep(Reff, Reff + 12, rho);
+      craterT = smoothstep(Reff, Reff + 45, rho);
       const north = smoothstep(-5, 25, cdz);
       craterT *= 1 - (1 - smoothstep(34, 54, dx)) * north;
     }
@@ -73,8 +73,8 @@ export class World {
     const big = fbm2(x * 0.02 + 10, z * 0.02, 4);
     const mid = fbm2(x * 0.07, z * 0.07 + 5, 3);
     const small = noise2(x * 0.4, z * 0.4) - 0.5;
-    h += big * (2.5 * (1 - basin * 0.7) + 17 * wallish) + mid * (1.1 + 4.5 * wallish) + small * (0.3 + 1.0 * wallish);
-    h += wallish * Math.sin(h * 0.35 + big * 6) * 1.6;
+    h += big * (2.5 * (1 - basin * 0.7) + 17 * wallish) + mid * (1.1 + 4.5 * wallish) + small * (0.3 + 1.0 * wallT);
+    h += wallT * (1 - craterT) * Math.sin(h * 0.35 + big * 6) * 1.6;
     if (h > -30) h = -30 + 22 * Math.tanh((h + 30) / 22);
     return h;
   }
@@ -125,7 +125,7 @@ export class World {
       for (let r = 0; r < nr - 1; r++) {
         for (let c = 0; c < cols - 1; c++) {
           const a = r * cols + c, b = a + 1, d = a + cols, e = d + 1;
-          idx.push(a, d, b, b, d, e);
+          idx.push(a, b, d, b, e, d);
         }
       }
       const g = new THREE.BufferGeometry();
@@ -189,13 +189,18 @@ export class World {
     });
 
     // 기둥(스파이어)
-    const sg = new THREE.CylinderGeometry(0.9, 2.6, 1, 12, 10, true);
+    const sg = new THREE.CylinderGeometry(0.28, 2.6, 1, 16, 18, false);
     {
+      // 높이를 따라 굵기가 불규칙하게 변하고 살짝 휘는 바위 기둥 (끝은 닫혀 있다)
       const p = sg.attributes.position;
       for (let i = 0; i < p.count; i++) {
         const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-        const n = 1 + 0.35 * (noise2(x * 1.3 + y * 3, z * 1.3) - 0.5);
-        p.setXYZ(i, x * n, y, z * n);
+        const ang = Math.atan2(z, x);
+        const t = y + 0.5;
+        const bulge = 1 + 0.32 * Math.sin(t * 11.0 + ang * 2.0) * (1 - t * 0.6)
+          + 0.45 * (noise2(Math.cos(ang) * 1.7 + t * 4.0, Math.sin(ang) * 1.7 + t * 2.3) - 0.5);
+        const bend = 0.9 * t * t;
+        p.setXYZ(i, x * bulge + bend, y, z * bulge + bend * 0.4);
       }
       sg.computeVertexNormals();
     }
@@ -206,9 +211,11 @@ export class World {
       const z = -d;
       const cx = this.pathX(z), w = this.halfWidth(z);
       const x = cx + (rand() < 0.5 ? -1 : 1) * (w * (0.4 + rand() * 1.0));
-      const y = this.heightAt(x, z);
+      // 경사면에서도 뜨지 않도록 주변에서 가장 낮은 지면 기준으로 박는다
+      let y = this.heightAt(x, z);
+      for (let a = 0; a < 8; a++) y = Math.min(y, this.heightAt(x + Math.cos(a * 0.785) * 7, z + Math.sin(a * 0.785) * 7));
       const hgt = 10 + rand() * 38;
-      dummy.position.set(x, y + hgt * 0.5 - 1.5, z);
+      dummy.position.set(x, y + hgt * 0.5 - 4, z);
       dummy.rotation.set((rand() - 0.5) * 0.12, rand() * 6.28, (rand() - 0.5) * 0.12);
       const s = 1 + rand() * 1.6;
       dummy.scale.set(s, hgt, s);

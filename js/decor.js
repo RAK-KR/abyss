@@ -26,7 +26,7 @@ function buildCoral(seed) {
     }
     for (let i = 0; i < RAD; i++) {
       const i2 = (i + 1) % RAD;
-      idx.push(base + i, base + RAD + i, base + i2, base + i2, base + RAD + i, base + RAD + i2);
+      idx.push(base + i, base + i2, base + RAD + i, base + i2, base + RAD + i2, base + RAD + i);
     }
   }
   function branch(p, dir, len, r, depth) {
