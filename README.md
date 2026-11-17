@@ -1,5 +1,7 @@
 # ABYSS
 
+https://rak-kr.github.io/abyss/
+
 해저 협곡을 따라 최심부의 신호원까지 내려갔다가 수면으로 돌아오는 한 판짜리 3D 탐사 게임.
 Three.js (로컬 번들, 외부 CDN 없음). 빌드 과정 없이 정적 파일 그대로 GitHub Pages에서 동작합니다.
 
