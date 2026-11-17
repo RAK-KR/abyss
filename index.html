@@ -32,7 +32,13 @@
   <h1>ABYSS</h1>
   <p class="sub">가장 깊은 곳에서 무언가가 신호를 보내고 있다</p>
   <button id="start">잠수 시작</button>
-  <label class="sens">마우스 감도 <input id="sens" type="range" min="0.4" max="2.6" step="0.1" value="1.0"> <span id="sensVal">1.0</span></label>
+  <div class="settings">
+    <label class="row">마우스 감도 <input id="sens" type="range" min="0.05" max="3" step="0.05" value="0.5"> <span id="sensVal">0.50</span></label>
+    <label class="row chk"><input id="invY" type="checkbox"> 상하 반전</label>
+    <label class="row">전체 볼륨 <input id="vol_master" type="range" min="0" max="1" step="0.05"> <span id="volv_master">80</span></label>
+    <label class="row">효과음 <input id="vol_sfx" type="range" min="0" max="1" step="0.05"> <span id="volv_sfx">90</span></label>
+    <label class="row">환경음 <input id="vol_amb" type="range" min="0" max="1" step="0.05"> <span id="volv_amb">80</span></label>
+  </div>
   <div class="help">
     <div><b>W / S</b> 전진 / 후진</div>
     <div><b>A / D</b> 좌 / 우 이동</div>
@@ -41,6 +47,7 @@
     <div><b>F</b> 조명 켜기 / 끄기</div>
     <div><b>E</b> 조명탄 (생물을 유인)</div>
     <div><b>마우스</b> 방향 조절</div>
+    <div><b>[ / ]</b> 감도 낮추기 / 높이기</div>
   </div>
 </div>
 <div id="end" class="hidden"><h1 id="endTitle"></h1><p id="endText"></p><button id="retry">다시 시작</button></div>

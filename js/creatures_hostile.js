@@ -1,5 +1,6 @@
 // 위협 생물: 루커(빛에 반응하는 심해 포식자), 레비아탄(최심부의 거대 생물)
 import * as THREE from 'three';
+import { CFG } from './config.js';
 import { makeRockMaterial } from './materials.js';
 import { makeGlowTexture } from './world.js';
 import { mulberry32, clamp, lerp, smoothstep } from './utils.js';
@@ -38,7 +39,7 @@ class Lurker {
     const tm = new THREE.Mesh(new THREE.ConeGeometry(1.2, 6, 12), skin);
     tm.rotation.x = Math.PI / 2; tm.position.z = 3;
     this.tail.add(tm);
-    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.8, 2.2), skin);
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.34, 2.8, 2.2), skin);
     fin.position.z = 5.4; fin.rotation.x = 0.25;
     this.tail.add(fin);
     this.group.add(this.tail);
@@ -354,9 +355,23 @@ export class Leviathan {
     return out.copy(t[t.length - 1]);
   }
 
-  wake() {
+  wake(sub) {
     if (this.state !== 'sleep') return;
     this.state = 'rising'; this.t = 0; this.speed = 2;
+    // 플레이어가 지나간 경로를 따라온다: 경로는 [레비아탄 위치, 플레이어 위치, ...플레이어 궤적]
+    this.path = [this.pos.clone(), sub.pos.clone()];
+    this.pathIdx = 0;          // 머리가 있는 구간의 시작 인덱스
+    this.pathOff = 0;          // 그 구간 안에서 진행한 거리
+    this.lungeState = 'idle';  // idle | tele | lunge
+    this.lungeT = CFG.LEVI_FIRST_LUNGE;
+    this.huntT = 0;
+  }
+
+  // 머리 ~ 플레이어까지 경로상 남은 거리
+  pathRemaining() {
+    let rem = 0;
+    for (let i = this.pathIdx; i < this.path.length - 1; i++) rem += this.path[i].distanceTo(this.path[i + 1]);
+    return Math.max(0, rem - this.pathOff);
   }
 
   writeSegments(time) {
@@ -406,39 +421,69 @@ export class Leviathan {
       this.eyeMat.color.setHex(0x200a06);
       this.eyes.forEach(g => (g.material.opacity = 0));
       this.jaw.rotation.x = 0.05 + 0.03 * Math.sin(time * 0.6);
+      this.gap = 999;
     } else {
-      // 눈 점화
       const ign = clamp(this.t / 1.8, 0, 1);
       this.eyeMat.color.setRGB(1.0 * ign + 0.1, 0.38 * ign + 0.03, 0.12 * ign);
-      this.eyes.forEach(g => (g.material.opacity = ign * (0.75 + 0.25 * Math.sin(time * 8))));
-      this.jaw.rotation.x = lerp(this.jaw.rotation.x, this.state === 'hunt' ? 0.55 + 0.1 * Math.sin(time * 3) : 0.1, 1 - Math.exp(-dt * 3));
+      let eyeBoost = 0.75 + 0.25 * Math.sin(time * 8);
 
-      let wantDir = _v.copy(sub.pos).sub(this.pos);
-      const dist = wantDir.length();
-      wantDir.normalize();
+      // 플레이어 궤적 기록
+      const last = this.path[this.path.length - 1];
+      if (last.distanceTo(sub.pos) > 2.5) this.path.push(sub.pos.clone());
+      else last.copy(sub.pos);
+
+      // 속도 결정
+      let speed;
       if (this.state === 'rising') {
-        wantDir.set(0, 1, 0).addScaledVector(this.dir, 0.2).normalize();
-        this.speed = lerp(this.speed, 6, 1 - Math.exp(-dt * 0.8));
+        speed = 5;
         if (this.t > 3.2) { this.state = 'hunt'; this.huntT = 0; }
       } else {
         this.huntT += dt;
-        const k = clamp(this.huntT / 38, 0, 1);
-        const base = lerp(9.8, 14.5, k);
-        // 플레이어가 멀면 따라붙고, 너무 앞서가면 약간 가속(긴장감 유지)
-        this.speed = lerp(this.speed, base + clamp((dist - 90) * 0.04, 0, 3), 1 - Math.exp(-dt * 1.2));
+        const k = clamp(this.huntT / CFG.LEVI_RAMP, 0, 1);
+        speed = lerp(CFG.LEVI_SPEED_START, CFG.LEVI_SPEED_END, k);
+        // 돌진: 예고(감속 + 눈 번쩍임) 후 급가속
+        this.lungeT -= dt;
+        if (this.lungeState === 'idle' && this.lungeT <= 0) { this.lungeState = 'tele'; this.lungeT = 1.0; this.onLungeWarn && this.onLungeWarn(); }
+        else if (this.lungeState === 'tele') {
+          speed *= 0.5; eyeBoost = 1.4;
+          if (this.lungeT <= 0) { this.lungeState = 'lunge'; this.lungeT = 1.4; this.onLunge && this.onLunge(); }
+        } else if (this.lungeState === 'lunge') {
+          speed *= 1.85;
+          if (this.lungeT <= 0) { this.lungeState = 'idle'; this.lungeT = CFG.LEVI_LUNGE_EVERY * lerp(1, 0.75, k); }
+        }
       }
-      const turn = this.state === 'hunt' ? 0.95 : 1.4;
-      this.dir.lerp(wantDir, 1 - Math.exp(-dt * turn)).normalize();
-      this.pos.addScaledVector(this.dir, this.speed * dt);
-      // 트레일 갱신
+      this.speed = lerp(this.speed, speed, 1 - Math.exp(-dt * 4));
+      this.eyes.forEach(g => (g.material.opacity = ign * eyeBoost * 0.8));
+      this.jaw.rotation.x = lerp(this.jaw.rotation.x, this.state === 'hunt' ? 0.5 + 0.12 * Math.sin(time * 3) + (this.lungeState === 'lunge' ? 0.4 : 0) : 0.1, 1 - Math.exp(-dt * 3));
+
+      // 경로를 따라 이동
+      let move = this.speed * dt;
+      while (move > 0 && this.pathIdx < this.path.length - 1) {
+        const a = this.path[this.pathIdx], b = this.path[this.pathIdx + 1];
+        const segLen = a.distanceTo(b);
+        const left = segLen - this.pathOff;
+        if (move < left) { this.pathOff += move; move = 0; }
+        else { move -= left; this.pathIdx++; this.pathOff = 0; }
+      }
+      const ia = this.path[this.pathIdx], ib = this.path[Math.min(this.pathIdx + 1, this.path.length - 1)];
+      const segLen = Math.max(1e-4, ia.distanceTo(ib));
+      this.pos.copy(ia).lerp(ib, this.pathOff / segLen);
+      _v.copy(ib).sub(ia);
+      if (_v.lengthSq() > 1e-6) this.dir.lerp(_v.normalize(), 1 - Math.exp(-dt * 3)).normalize();
+      // 메모리 정리
+      if (this.pathIdx > 200) { this.path.splice(0, 150); this.pathIdx -= 150; }
+
+      // 트레일(몸통)
       const first = this.trail[0];
       if (first.distanceTo(this.pos) > 1.5) {
         this.trail.unshift(this.pos.clone());
         if (this.trail.length > 900) this.trail.pop();
       } else first.copy(this.pos);
-      // 충돌
+
+      const rem = this.pathRemaining();
+      this.gap = rem;
       const headHit = this.pos.distanceTo(sub.pos);
-      if (headHit < 11) kill = true;
+      if (headHit < 12 || rem < 14) kill = true;
       if (!kill) {
         for (let i = 0; i < 7; i++) {
           this.sample((i + 1.4) * this.spacing, _v2);
@@ -446,7 +491,6 @@ export class Leviathan {
           if (_v2.distanceTo(sub.pos) < r * 0.95 + 2.6) { kill = true; break; }
         }
       }
-      this.gap = dist;
     }
     this.writeSegments(time);
     return kill;

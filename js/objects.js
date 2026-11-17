@@ -103,22 +103,27 @@ export class Beacon {
     this.light.position.y = 8;
     this.group.add(this.light);
 
-    // 수면까지 뻗는 신호 빔 (안개 무시, 지형에 가려짐)
+    // 수면까지 뻗는 신호 광주(부드러운 원통형 빛, 안개 무시, 지형에 가려짐)
     const H = 520;
-    const bg = new THREE.CylinderGeometry(0.9, 1.6, H, 16, 1, true);
+    const bg = new THREE.CylinderGeometry(7, 13, H, 40, 1, true);
     bg.translate(0, H / 2, 0);
     this.beamMat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
-      uniforms: { uTime: SHARED.uTime, uColor: { value: new THREE.Color(0.35, 0.9, 1.0) }, uPow: { value: 1 }, uH: { value: H } },
+      uniforms: {
+        uTime: SHARED.uTime, uColor: { value: new THREE.Color(0.30, 0.85, 1.0) }, uPow: { value: 1 }, uH: { value: H },
+        uAxis: { value: new THREE.Vector2(x, z) },
+      },
       vertexShader: /* glsl */`varying float vY; varying vec3 vN; varying vec3 vV; void main(){ vY = position.y; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
       fragmentShader: /* glsl */`
-        varying float vY; varying vec3 vN; varying vec3 vV; uniform float uTime; uniform vec3 uColor; uniform float uPow; uniform float uH;
+        varying float vY; varying vec3 vN; varying vec3 vV; uniform float uTime; uniform vec3 uColor; uniform float uPow; uniform float uH; uniform vec2 uAxis;
         void main(){
-          float fr = pow(abs(dot(normalize(vN), normalize(vV))), 1.2);
+          float fr = pow(abs(dot(normalize(vN), normalize(vV))), 2.2);
           float t = vY / uH;
-          float ping = smoothstep(0.06, 0.0, abs(fract(t * 3.0 - uTime * 0.18) - 0.5) - 0.44) ;
-          float a = fr * (0.28 + 0.9 * ping) * (1.0 - t * 0.55) * uPow;
-          gl_FragColor = vec4(uColor * a * 0.9, a * 0.8);
+          float band = 0.5 + 0.5 * sin((t * 5.0 - uTime * 0.25) * 6.2831);
+          float a = fr * (0.07 + 0.10 * band) * (1.0 - t * 0.6) * uPow;
+          float camAxis = length(cameraPosition.xz - uAxis);
+          a *= mix(0.25, 1.0, smoothstep(12.0, 70.0, camAxis));
+          gl_FragColor = vec4(uColor * a, a);
         }`,
     });
     this.beam = new THREE.Mesh(bg, this.beamMat);

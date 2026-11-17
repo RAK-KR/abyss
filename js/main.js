@@ -12,6 +12,8 @@ import { Lurkers, Leviathan } from './creatures_hostile.js';
 import { Pickups, Beacon, Flares } from './objects.js';
 import { AudioSys } from './audio.js';
 import { Story } from './story.js';
+import { EscapeCourse } from './escape.js';
+import { Detail } from './decor.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -25,6 +27,10 @@ const snow = new MarineSnow(scene);
 const motes = new GlowMotes(scene, world);
 const jelly = new Jellyfish(scene, world);
 const fish = new FishSchools(scene, world);
+const fishGlow = new FishSchools(scene, world, { glow: true, schools: 6, perSchool: 30, dStart: 300, dStep: 130, size: 0.6, seed: 909 });
+const detail = new Detail(scene, world);
+const course = new EscapeCourse(scene, world);
+sub.colliders = course.colliders;
 const lurkers = new Lurkers(scene, world);
 const pickups = new Pickups(scene, world);
 const beacon = new Beacon(scene, world);
@@ -32,6 +38,9 @@ const flares = new Flares(scene);
 const levi = new Leviathan(scene, world, beacon.base);
 const audio = new AudioSys();
 const story = new Story($('subtitle'));
+
+levi.onLungeWarn = () => { audio.lungeWarn(); story.say('…온다.', 1.2); };
+levi.onLunge = () => { audio.lunge(); G.shake = Math.max(G.shake, 0.9); };
 
 const G = {
   state: 'menu',            // menu | play | paused | dead | won
@@ -46,20 +55,36 @@ const camPos = new THREE.Vector3();
 const camLook = new THREE.Vector3();
 let camInit = false;
 
-// ---------- 감도 ----------
-let sens = 1.0;
-try { const sv = parseFloat(localStorage.getItem('abyss_sens')); if (sv > 0) sens = sv; } catch (e) {}
-$('sens').value = sens; $('sensVal').textContent = sens.toFixed(1);
-$('sens').addEventListener('input', (e) => {
-  sens = parseFloat(e.target.value); $('sensVal').textContent = sens.toFixed(1);
-  try { localStorage.setItem('abyss_sens', String(sens)); } catch (err) {}
-});
+// ---------- 설정 (감도 / 볼륨) ----------
+const SENS_MIN = 0.05, SENS_MAX = 3.0;
+let sens = 0.5, invY = false;
+try {
+  const sv = parseFloat(localStorage.getItem('abyss_sens2')); if (sv >= SENS_MIN) sens = sv;
+  invY = localStorage.getItem('abyss_invy') === '1';
+} catch (e) { /* 저장값 없음 */ }
+function setSens(v, save = true) {
+  sens = clamp(Math.round(v * 100) / 100, SENS_MIN, SENS_MAX);
+  $('sens').value = sens; $('sensVal').textContent = sens.toFixed(2);
+  if (save) { try { localStorage.setItem('abyss_sens2', String(sens)); } catch (err) { /* 무시 */ } }
+}
+$('sens').min = SENS_MIN; $('sens').max = SENS_MAX; $('sens').step = 0.05;
+setSens(sens, false);
+$('sens').addEventListener('input', (e) => setSens(parseFloat(e.target.value)));
+$('invY').checked = invY;
+$('invY').addEventListener('change', (e) => { invY = e.target.checked; try { localStorage.setItem('abyss_invy', invY ? '1' : '0'); } catch (err) { /* 무시 */ } });
+for (const k of ['master', 'sfx', 'amb']) {
+  const el = $('vol_' + k), lab = $('volv_' + k);
+  el.value = audio.vol[k]; lab.textContent = Math.round(audio.vol[k] * 100);
+  el.addEventListener('input', (e) => { const v = parseFloat(e.target.value); audio.setVolume(k, v); lab.textContent = Math.round(v * 100); });
+}
 
 // ---------- 입력 ----------
 addEventListener('keydown', (e) => {
   if (e.repeat) return;
   keys[e.code] = true;
   if (G.state !== 'play') return;
+  if (e.code === 'BracketLeft') { setSens(sens - (sens > 0.5 ? 0.1 : 0.05)); story.say('감도 ' + sens.toFixed(2), 1.2); }
+  if (e.code === 'BracketRight') { setSens(sens + (sens >= 0.5 ? 0.1 : 0.05)); story.say('감도 ' + sens.toFixed(2), 1.2); }
   if (e.code === 'KeyF') { sub.lampOn = !sub.lampOn; audio.lampClick(); }
   if (e.code === 'KeyE' && G.flareCount > 0 && flares.fire(sub)) { G.flareCount--; audio.flare(); }
 });
@@ -67,8 +92,8 @@ addEventListener('keyup', (e) => { keys[e.code] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 addEventListener('mousemove', (e) => {
   if (G.state !== 'play') return;
-  if (document.pointerLockElement === $('view')) sub.steer(e.movementX, e.movementY, 0.0022 * sens);
-  else if (e.buttons & 1) sub.steer(e.movementX, e.movementY, 0.0022 * sens);
+  if (document.pointerLockElement === $('view')) sub.steer(e.movementX, invY ? -e.movementY : e.movementY, 0.0022 * sens);
+  else if (e.buttons & 1) sub.steer(e.movementX, invY ? -e.movementY : e.movementY, 0.0022 * sens);
 });
 document.addEventListener('pointerlockchange', () => {
   if (document.pointerLockElement !== $('view') && G.state === 'play' && !DEBUG) pause();
@@ -93,6 +118,7 @@ function resetRun() {
   sub.lampOn = true; sub.canSurface = false;
   story.reset();
   camInit = false;
+  course.reset && course.reset();
   pickups.items.forEach(i => { i.taken = false; i.grp.visible = true; });
   location.hash = '';
 }
@@ -214,6 +240,8 @@ function tick(now, render) {
     } else if (r.impact > 1.6) audio.scrape();
 
     fish.update(dt, now / 1000, sub);
+    fishGlow.update(dt, now / 1000, sub);
+    course.update(dt, now / 1000);
     // 위협
     const events = lurkers.update(dt, now / 1000, sub, flares.list, null, audio);
     for (const ev of events) {
@@ -231,13 +259,15 @@ function tick(now, render) {
     beacon.update(dt, now / 1000, sub, () => {
       G.phase = 'escape';
       sub.canSurface = true;
-      levi.wake();
-      G.bat = Math.min(100, G.bat + 20);
+      levi.wake(sub);
+      course.collapse();
+      audio.rumble();
+      G.bat = Math.min(100, G.bat + 40);
       audio.roar(); audio.pickup();
       G.shake = 1.4;
       story.say('코어를 회수했다. 코어가 잠수정에 전력을 공급하고 있다.', 3.5);
-      story.say('…바닥이 움직인다. 올라가야 한다. 지금.', 4.5);
-      story.say('수면까지 쉬지 말고 상승하라. 배터리를 아끼지 마라.', 5);
+      story.say('…분화구 입구가 무너진다. 길이 막힌다.', 4);
+      story.say('붉게 빛나는 틈이 출구다. 바위 사이를 뚫고 올라가야 한다.', 5.5);
     });
     flares.update(dt, now / 1000, world);
 
@@ -253,6 +283,8 @@ function tick(now, render) {
     }
     G.panic = lerp(G.panic, Math.max(chase, lurkers.danger * 0.7), 1 - Math.exp(-dt * 3));
 
+    const ru = detail.nearestRuin(sub.pos, 70);
+    if (ru) story.once('ruin', '인공물이 아니다. 누군가 이 깊이까지 무언가를 세웠다.', 5.5);
     // 스토리/경보
     story.depthTriggers(depth, { battery: G.bat });
     story.update(dt);
@@ -267,17 +299,19 @@ function tick(now, render) {
 
     G.hit = Math.max(0, G.hit - dt * 1.4);
     G.shake = Math.max(0, G.shake - dt * 0.9);
-    audio.update(dt, { depth01: d01, speed01: clamp(sub.speed / 16, 0, 1), thrust: Math.abs(input.thrust), danger: lurkers.danger || 0, chase });
+    audio.update(dt, { depth01: d01, speed01: clamp(sub.speed / 16, 0, 1), thrust: Math.abs(input.thrust), boost: sub.boosting, danger: lurkers.danger || 0, chase });
     updateHUD(depth);
   } else {
     // 메뉴/정지 중에도 배경이 살아 있게
     sub.update(dt, { thrust: 0, strafe: 0, vert: 0, boost: false }, world, 100, now / 1000);
     sub.pos.x += Math.sin(now / 4000) * dt * 0.5;
     fish.update(dt, now / 1000, sub);
+    fishGlow.update(dt, now / 1000, sub);
     if (G.state === 'menu') { sub.yawT = Math.sin(now / 9000) * 0.6; sub.pitchT = 0.12; }
   }
 
   world.update(dt, camera, depth);
+  detail.update(camera, world._env, depth, story);
   jelly.update(sub, scene);
   motes.update(scene);
   snow.update(camera, sub, world._env, scene);
@@ -290,7 +324,7 @@ requestAnimationFrame(frame);
 if (DEBUG) {
   window.THREE = THREE;
   window.__g = {
-    G, sub, world, levi, lurkers, beacon, camera, scene, R, keys,
+    G, sub, world, levi, course, detail, audio, lurkers, beacon, camera, scene, R, keys,
     // 진행 거리 d(m), 바닥에서의 높이로 순간이동
     tp(d, above = 12, xOff = 0) {
       const z = -d;

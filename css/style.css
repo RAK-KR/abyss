@@ -30,5 +30,8 @@ button:hover { background: rgba(143,233,255,.14); box-shadow: 0 0 22px rgba(143,
 .help { font-size: 12px; letter-spacing: .1em; opacity: .55; line-height: 2; }
 .help b { display: inline-block; width: 110px; text-align: right; margin-right: 14px; color: #8fe9ff; font-weight: 400; }
 
-.sens { font-size: 12px; letter-spacing: .12em; opacity: .75; display: flex; align-items: center; gap: 12px; }
-.sens input { width: 160px; accent-color: #6fe0f5; }
+.settings { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.settings .row { font-size: 12px; letter-spacing: .12em; opacity: .8; display: grid; grid-template-columns: 96px 170px 38px; align-items: center; gap: 10px; }
+.settings .row.chk { grid-template-columns: auto auto; justify-content: start; }
+.settings input[type=range] { width: 170px; accent-color: #6fe0f5; }
+.settings .row span { text-align: right; font-variant-numeric: tabular-nums; }

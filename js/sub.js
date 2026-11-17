@@ -69,9 +69,9 @@ export class Sub {
     this.group.add(frame);
 
     // 꼬리 지느러미
-    const finH = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.08, 1.0), accent);
+    const finH = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.22, 1.05), accent);
     finH.position.set(0, 0, 2.5);
-    const finV = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.9, 1.0), accent);
+    const finV = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.9, 1.05), accent);
     finV.position.set(0, 0, 2.5);
     this.group.add(finH, finV);
 
@@ -121,6 +121,52 @@ export class Sub {
       f.position.set(s * 0.85, -0.45, -2.96);
       this.group.add(h, f);
     }
+    // ---- 디테일: 매니퓰레이터 암, 샘플 바구니, 카메라 포드, 안테나, 밸러스트 탱크, 측면 패널 ----
+    const steel = new THREE.MeshStandardMaterial({ color: 0x8e979b, metalness: 0.3, roughness: 0.5 });
+    const armBase = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), dark);
+    armBase.position.set(0.62, -1.18, -1.7);
+    const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.2, 8), steel);
+    upper.position.set(0.62, -1.32, -2.25); upper.rotation.x = Math.PI / 2 - 0.35;
+    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), dark);
+    elbow.position.set(0.62, -1.5, -2.85);
+    const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.0, 8), steel);
+    fore.position.set(0.62, -1.38, -3.35); fore.rotation.x = Math.PI / 2 + 0.25;
+    this.group.add(armBase, upper, elbow, fore);
+    for (const s of [-1, 1]) {
+      const claw = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.5), steel);
+      claw.position.set(0.62 + s * 0.1, -1.25, -3.85); claw.rotation.y = s * 0.3;
+      this.group.add(claw);
+    }
+    const basket = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.3, 1.0), dark);
+    basket.position.set(-0.62, -1.45, -1.9);
+    this.group.add(basket);
+    for (const [px, pz] of [[-1.1, -2.35], [-0.12, -2.35], [-1.1, -1.45], [-0.12, -1.45]]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.4, 6), steel);
+      post.position.set(px, -1.2, pz); this.group.add(post);
+    }
+    const pod = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.55, 16), dark);
+    pod.rotation.x = Math.PI / 2; pod.position.set(0, 1.42, -0.5);
+    const podLens = new THREE.Mesh(new THREE.CircleGeometry(0.3, 16), new THREE.MeshBasicMaterial({ color: 0x1b4a58 }));
+    podLens.position.set(0, 1.42, -0.79);
+    this.group.add(pod, podLens);
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, 1.7, 6), steel);
+    ant.position.set(0.55, 2.0, 1.5);
+    this.antTip = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff5a40 }));
+    this.antTip.position.set(0.55, 2.9, 1.5);
+    this.group.add(ant, this.antTip);
+    for (const s of [-1, 1]) {
+      const tank = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 2.6, 12), accent);
+      tank.rotation.x = Math.PI / 2; tank.position.set(s * 1.12, -1.1, 0.9);
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.7, 1.9), steel);
+      plate.position.set(s * 1.46, 0.15, 0.55);
+      this.group.add(tank, plate);
+      for (let i = 0; i < 4; i++) {
+        const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.08, 6), dark);
+        bolt.rotation.z = Math.PI / 2; bolt.position.set(s * 1.54, 0.15 + (i % 2 ? 0.22 : -0.22), 0.0 + Math.floor(i / 2) * 1.1);
+        this.group.add(bolt);
+      }
+    }
+
     // 항법등
     this.navRed = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, color: 0xff2a20, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
     this.navRed.scale.setScalar(1.3); this.navRed.position.set(0, 1.5, 0.2);
@@ -259,9 +305,9 @@ export class Sub {
 
   update(dt, input, world, battery, time) {
     // 방향 보간
-    this.yaw = lerp(this.yaw, this.yawT, 1 - Math.exp(-dt * 7));
-    this.pitch = lerp(this.pitch, this.pitchT, 1 - Math.exp(-dt * 7));
-    const yawRate = (this.yawT - this.yaw);
+    this.yaw = lerp(this.yaw, this.yawT, 1 - Math.exp(-dt * 14));
+    this.pitch = lerp(this.pitch, this.pitchT, 1 - Math.exp(-dt * 14));
+    const yawRate = (this.yawT - this.yaw) * 0.5;
     this.roll = lerp(this.roll, clamp(yawRate * 1.2 - input.strafe * 0.12, -0.5, 0.5), 1 - Math.exp(-dt * 4));
     this.quat.setFromEuler(new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ'));
 
@@ -298,6 +344,29 @@ export class Sub {
         this.vel.addScaledVector(n, -vn * 1.35);
       }
     }
+    // 암반 게이트/붕괴 암석 충돌(구)
+    if (this.colliders) {
+      const cs = this.colliders;
+      for (let i = 0; i < cs.length; i++) {
+        const c = cs[i];
+        if (!c.on) continue;
+        const rr = c.r + 2.1;
+        const dy = this.pos.y - c.y; if (dy > rr || dy < -rr) continue;
+        const dx = this.pos.x - c.x; if (dx > rr || dx < -rr) continue;
+        const dz = this.pos.z - c.z; if (dz > rr || dz < -rr) continue;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 < rr * rr) {
+          const d = Math.sqrt(d2) || 0.001;
+          const nx = dx / d, ny = dy / d, nz = dz / d, pen = rr - d;
+          this.pos.x += nx * pen; this.pos.y += ny * pen; this.pos.z += nz * pen;
+          const vn = this.vel.x * nx + this.vel.y * ny + this.vel.z * nz;
+          if (vn < 0) {
+            impact = Math.max(impact, -vn);
+            this.vel.x -= nx * vn * 1.3; this.vel.y -= ny * vn * 1.3; this.vel.z -= nz * vn * 1.3;
+          }
+        }
+      }
+    }
     // 월드 경계
     if (Math.abs(this.pos.x) > CFG.X_HALF - 12) { this.pos.x = clamp(this.pos.x, -CFG.X_HALF + 12, CFG.X_HALF - 12); this.vel.x *= -0.3; }
     this.pos.z = clamp(this.pos.z, CFG.Z_MIN + 12, CFG.Z_MAX - 6);
@@ -320,6 +389,7 @@ export class Sub {
     this.prop += dt * (6 + Math.abs(input.thrust) * 40 * hasPower + this.speed * 1.2);
     for (const p of this.props) p.rotation.z = this.prop;
     this.navRed.material.opacity = (Math.sin(time * 3.2) > 0.6) ? 1 : 0.08;
+    this.antTip.material.color.setRGB(Math.sin(time * 2.1) > 0.3 ? 1 : 0.15, 0.2, 0.1);
     this.updateBubbles(dt, Math.abs(input.thrust) * hasPower);
 
     this.group.position.copy(this.pos);

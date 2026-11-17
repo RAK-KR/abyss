@@ -17,7 +17,7 @@ export class World {
     scene.background = new THREE.Color(0x2a8fb0);
 
     // 조명 (수심에 따라 세기 변화)
-    this.hemi = new THREE.HemisphereLight(0x5fb8d8, 0x0a1c2a, 1.0);
+    this.hemi = new THREE.HemisphereLight(0x78b8cc, 0x2a2118, 1.0);
     this.sun = new THREE.DirectionalLight(0xbfefff, 2.2);
     this.sun.position.set(40, 200, 30);
     scene.add(this.hemi, this.sun);
@@ -37,9 +37,7 @@ export class World {
   }
   halfWidth(z) {
     const d = -z;
-    let w = 38 + 16 * noise2(d * 0.012, 3.3);
-    w = lerp(w, 125, smoothstep(1290, 1420, d));
-    return w;
+    return 38 + 14 * noise2(d * 0.012, 3.3);
   }
   floorY(z) {
     const d = clamp(-z, -100, 1700);
@@ -48,21 +46,35 @@ export class World {
     return base;
   }
   heightAt(x, z) {
-    const d = clamp(-z, -100, 1700);
+    const d = clamp(-z, -100, 1750);
     const cx = this.pathX(z);
     const w = this.halfWidth(z);
     const dx = Math.abs(x - cx);
     const wallT = smoothstep(w, w + 55, dx);
     const wallH = 70 + 0.34 * clamp(d, 0, 1500);
     const basin = smoothstep(1330, 1430, d);
-    let h = this.floorY(z) + wallT * wallH;
+    const floor = this.floorY(z);
+    let h = floor + wallT * wallH;
+
+    // 최심부 크레이터: 사방이 막힌 수직 구덩이(북쪽 협곡 입구만 열려 있다)
+    const cdx = x, cdz = z + CFG.BASIN_D;
+    const rho = Math.hypot(cdx, cdz);
+    let craterT = 0;
+    if (rho < CFG.CRATER_R + 80) {
+      const ang = Math.atan2(cdz, cdx);
+      const Reff = CFG.CRATER_R + 9 * fbm2(Math.cos(ang) * 2.2 + 5, Math.sin(ang) * 2.2, 3);
+      craterT = smoothstep(Reff, Reff + 12, rho);
+      const north = smoothstep(-5, 25, cdz);
+      craterT *= 1 - (1 - smoothstep(34, 54, dx)) * north;
+    }
+    h = Math.max(h, floor + craterT * 620);
+
+    const wallish = Math.max(wallT, craterT);
     const big = fbm2(x * 0.02 + 10, z * 0.02, 4);
     const mid = fbm2(x * 0.07, z * 0.07 + 5, 3);
     const small = noise2(x * 0.4, z * 0.4) - 0.5;
-    h += big * (2.5 * (1 - basin * 0.7) + 17 * wallT) + mid * (1.1 + 4.5 * wallT) + small * (0.3 + 1.0 * wallT);
-    // 벽면 단층 느낌
-    h += wallT * Math.sin(h * 0.35 + big * 6) * 1.6;
-    // 부드러운 상한(수면 아래 -8m)
+    h += big * (2.5 * (1 - basin * 0.7) + 17 * wallish) + mid * (1.1 + 4.5 * wallish) + small * (0.3 + 1.0 * wallish);
+    h += wallish * Math.sin(h * 0.35 + big * 6) * 1.6;
     if (h > -30) h = -30 + 22 * Math.tanh((h + 30) / 22);
     return h;
   }
@@ -75,7 +87,7 @@ export class World {
 
   // ---------- 지형 메시 ----------
   buildTerrain() {
-    this.mat = makeRockMaterial({ vertexColors: true, roughness: 0.95, bump: 1.0 });
+    this.mat = makeRockMaterial({ vertexColors: true, roughness: 0.95, bump: 1.0, ripples: true });
     const cols = Math.round((CFG.X_HALF * 2) / STEP) + 1;
     const rows = Math.round((CFG.Z_MAX - CFG.Z_MIN) / STEP) + 1;
     this.chunks = [];
@@ -102,9 +114,9 @@ export class World {
           const ao = 0.5 + 0.5 * cav;
           const sand = smoothstep(0.35, 0.05, slope);
           const patch = noise2(x * 0.05, z * 0.05);
-          const rr = lerp(0.20, 0.50, sand) * (0.8 + 0.4 * patch);
-          const gg = lerp(0.23, 0.50, sand) * (0.8 + 0.4 * patch);
-          const bb = lerp(0.27, 0.52, sand);
+          const rr = lerp(0.27, 0.66, sand) * (0.8 + 0.4 * patch);
+          const gg = lerp(0.28, 0.58, sand) * (0.8 + 0.4 * patch);
+          const bb = lerp(0.31, 0.46, sand) * (0.9 + 0.2 * patch);
           col[p] = rr * ao; col[p + 1] = gg * ao; col[p + 2] = bb * ao;
           p += 3;
         }
@@ -336,7 +348,7 @@ export class World {
     this.scene.fog.color.copy(this._envColor);
     this.scene.fog.density = e.den;
     this.scene.background.copy(this._envColor);
-    this.hemi.intensity = 0.1 + 0.9 * e.amb;
+    this.hemi.intensity = 0.1 + 0.9 * e.amb + 0.95 * smoothstep(60, 220, depth);
     this.sun.intensity = 1.7 * e.sun;
     SHARED.uSun.value = e.sun;
     this.surfaceMat.uniforms.uFogColor.value.copy(this._envColor);

@@ -154,30 +154,36 @@ function makeFishGeometry() {
 }
 
 export class FishSchools {
-  constructor(scene, world, schools = 9, perSchool = 38) {
+  constructor(scene, world, opts = {}) {
+    const { schools = 9, perSchool = 38, dStart = 60, dStep = 95, glow = false, size = 1, seed = 555 } = opts;
     this.world = world;
-    this.rand = mulberry32(555);
+    this.rand = mulberry32(seed);
     this.schools = [];
+    this.size = size;
     const total = schools * perSchool;
-    this.mesh = new THREE.InstancedMesh(makeFishGeometry(), new THREE.MeshStandardMaterial({ color: 0x9fb8c4, metalness: 0.55, roughness: 0.3 }), total);
+    const mat = glow
+      ? new THREE.MeshBasicMaterial({ color: 0xffffff })
+      : new THREE.MeshStandardMaterial({ color: 0x9fb8c4, metalness: 0.55, roughness: 0.3 });
+    this.mesh = new THREE.InstancedMesh(makeFishGeometry(), mat, total);
     this.mesh.frustumCulled = false;
-    this.mesh.castShadow = true;
+    this.mesh.castShadow = !glow;
     scene.add(this.mesh);
     const c = new THREE.Color();
     let k = 0;
     for (let s = 0; s < schools; s++) {
-      const d = 60 + s * 95 + this.rand() * 40;
+      const d = dStart + s * dStep + this.rand() * 40;
       const z = -d;
       const x = world.pathX(z) + (this.rand() - 0.5) * world.halfWidth(z);
-      const y = world.heightAt(x, z) + 12 + this.rand() * 22;
+      const y = world.heightAt(x, z) + (glow ? 6 : 12) + this.rand() * 22;
       const fish = [];
       for (let i = 0; i < perSchool; i++) {
         fish.push({
           w1: 0.35 + this.rand() * 0.25, w2: 0.2 + this.rand() * 0.2,
           p1: this.rand() * 6.28, p2: this.rand() * 6.28, p3: this.rand() * 6.28,
-          R: 5 + this.rand() * 9, size: 0.45 + this.rand() * 0.35,
+          R: (5 + this.rand() * 9) * (glow ? 0.8 : 1), size: (0.45 + this.rand() * 0.35) * size,
         });
-        c.setHSL(0.55 + this.rand() * 0.06, 0.25, 0.55 + this.rand() * 0.3);
+        if (glow) c.setHSL(0.48 + this.rand() * 0.1, 0.9, 0.55).multiplyScalar(1.7);
+        else c.setHSL(0.55 + this.rand() * 0.06, 0.25, 0.55 + this.rand() * 0.3);
         this.mesh.setColorAt(k++, c);
       }
       this.schools.push({ center: new THREE.Vector3(x, y, z), home: new THREE.Vector3(x, y, z), fish, flee: new THREE.Vector3() });

@@ -52,6 +52,13 @@ export function makeRockMaterial(opts = {}) {
           vec3 g = vnGrad(vWPos * 1.1) * 0.55 + vnGrad(vWPos * 3.7) * 0.28;
           vec3 gv = (viewMatrix * vec4(g, 0.0)).xyz;
           normal = normalize(normal + (gv - dot(gv, normal) * normal) * ${(opts.bump ?? 0.9).toFixed(2)});
+          ${opts.ripples ? `
+          vec3 upV = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+          float rip = smoothstep(0.86, 0.98, dot(normal, upV));
+          float ph = dot(vWPos.xz, vec2(0.83, 0.55)) * 1.7 + vn(vec3(vWPos.xz * 0.11, 3.0)) * 8.0;
+          vec3 rg = (viewMatrix * vec4(0.83, 0.0, 0.55, 0.0)).xyz * cos(ph) * rip * 0.42;
+          normal = normalize(normal + rg);
+          diffuseColor.rgb *= 1.0 + sin(ph) * 0.10 * rip;` : ''}
         }`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         {
